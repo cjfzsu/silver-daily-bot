@@ -1,0 +1,52 @@
+name: Silver Daily Report
+on:
+  schedule:
+    - cron: '30 0 * * *' # 北京时间 08:30 自动运行
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+    - run: pip install requests
+    - run: |
+        import requests, os
+        from datetime import datetime
+
+        # ===== 1. 获取数据 (用FRED CSV直链，最稳) =====
+        # 获取TIPS
+        tips_url = "https://fred.stlouisfed.org/graph/fredgraph.csv?charttype=line&s%5B1%5D%5Bid%5D=DFII10&fq=Daily&ln=0"
+        tips_resp = requests.get(tips_url, timeout=15).text.strip().split('\n')
+        latest_tips_line = tips_resp[-1]
+        tips_value = float(latest_tips_line.split(',')[1])
+        
+        # 获取核心CPI (暂用模拟，你需替换真实源)
+        core_cpi = 0.32 
+
+        # 获取库存 (暂用模拟)
+        inventory = 8490
+
+        # ===== 2. 计算信号灯 =====
+        tips_light = "🔴" if tips_value > 2.1 else "🟡" if tips_value > 1.7 else "🟢"
+        cpi_light = "🔴" if core_cpi > 0.35 else "🟡" if core_cpi > 0.2 else "🟢"
+        inv_light = "🔴" if inventory > 9500 else "🟡" if inventory > 8000 else "🟢"
+
+        # ===== 3. 推送 =====
+        title = f"🥈 白银简表 {datetime.now().strftime('%m-%d')}"
+        body = f"""
+📊 实际利率灯: {tips_light}  {tips_value}%
+🔥 通胀感染灯: {cpi_light}  {core_cpi}%
+📦 实物紧张灯: {inv_light}  {inventory}万oz
+
+(阈值: TIPS<1.7🟢, 1.7-2.1🟡, >2.1🔴)
+        """
+        
+        bark_key =  "${{ https://api.day.app/SokxMKfT3m4a5BGBdzHQc8/}}"
+        requests.get(f"https://api.day.app/{bark_key}/{title}/{body}")
+      shell: python
+
+
